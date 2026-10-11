@@ -1,0 +1,28 @@
+name: publish
+on:
+  push:
+    branches: [main]
+    paths: ['bundle/**', '.github/workflows/publish.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: { group: publish, cancel-in-progress: false }
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack bundle and push to gh-pages
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir out
+          base64 -d bundle/site.tgz.b64 | tar xz -C out
+          test -f out/index.html
+          if grep -rq -e 'ฉบับ ผบ.ตร.' -e 'ฉบับนายกรัฐมนตรี' out; then echo "brief text found - refusing to publish"; exit 1; fi
+          cd out
+          git init -q -b gh-pages
+          git add -A
+          git -c user.name="groknews-bot" -c user.email="groknews-bot@users.noreply.github.com" commit -qm "publish ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
