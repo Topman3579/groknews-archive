@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://topman3579.github.io/groknews-archive/sitemap.xml
