@@ -12,13 +12,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Assemble bundle (split parts + manifest, or legacy single file)
+        run: |
+          set -euo pipefail
+          if [ -f bundle/manifest.json ]; then
+            parts=$(python3 -c "import json;print(' '.join(json.load(open('bundle/manifest.json'))['parts']))")
+            want=$(python3 -c "import json;print(json.load(open('bundle/manifest.json'))['sha256'])")
+            : > site.tgz.b64
+            for p in $parts; do
+              if [ ! -f "bundle/$p" ]; then echo "part $p missing - waiting for next push"; echo "SKIP=1" >> "$GITHUB_ENV"; exit 0; fi
+              cat "bundle/$p" >> site.tgz.b64
+            done
+            got=$(sha256sum site.tgz.b64 | cut -d' ' -f1)
+            if [ "$got" != "$want" ]; then echo "parts/manifest mismatch ($got != $want) - upload in progress, skipping"; echo "SKIP=1" >> "$GITHUB_ENV"; exit 0; fi
+          else
+            cp bundle/site.tgz.b64 site.tgz.b64
+          fi
+          echo "SKIP=0" >> "$GITHUB_ENV"
       - name: Unpack bundle and push to gh-pages
+        if: env.SKIP == '0'
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           mkdir out
-          base64 -d bundle/site.tgz.b64 | tar xz -C out
+          base64 -d site.tgz.b64 | tar xz -C out
           test -f out/index.html
           if grep -rq -e 'ฉบับ ผบ.ตร.' -e 'ฉบับนายกรัฐมนตรี' out; then echo "brief text found - refusing to publish"; exit 1; fi
           cd out
